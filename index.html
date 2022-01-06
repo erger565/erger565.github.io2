@@ -1,0 +1,265 @@
+﻿<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Star Collector</title>
+
+    <script src="//cdn.jsdelivr.net/phaser/2.6.2/phaser.min.js"></script>
+</head>
+<body>
+    <script type="text/javascript">
+        window.onload = function () {
+            var game = new Phaser.Game(800, 600, Phaser.AUTO, '', {preload: preload, create: create, update: update});
+
+            function preload() {
+                game.load.image('platform', 'assets/platform.png');
+                game.load.image('ground', 'assets/ground.png');
+                game.load.image('goal', 'assets/star.png');
+                game.load.spritesheet('bg', 'assets/bg.png', 800, 600);
+                game.load.spritesheet('snowflakes', 'assets/snowflakes.png', 17, 17);
+                game.load.spritesheet('player1', 'assets/player1.png', 28, 38);
+                game.load.spritesheet('player2', 'assets/player2.png', 28, 38);
+            } // End of preload function.
+            // Variable declaration
+            var scoreTextP1;
+            var scoreTextP2;
+
+            var scoreP1 = 0;
+            var scoreP2 = 0;
+
+            var isP1LookingLeft = 0;
+            var isP2LookingLeft = 1;
+
+            var endGameText; // To display text when game ends.
+
+            // For snow
+            var max = 0;
+            var back_emitter;
+
+            // For timer
+            var timer;
+            var timerText = 0;
+            
+            // Star timer
+            var starTimer; 
+
+            function create() {
+                game.physics.startSystem(Phaser.Physics.ARCADE);
+                var ledge;
+                var ground;
+                // For background.
+                bg = game.add.sprite(0, 0, 'bg');
+                bg.animations.add('twinkle', [0, 1, 2, 3, 4], 8, true);
+
+                // For platforms.
+                platforms = game.add.group();
+                platforms.enableBody = true;
+
+                ledge = platforms.create(575, 400, 'platform');
+                ledge.body.immovable = true;
+                ledge = platforms.create(-175, 400, 'platform');
+                ledge.body.immovable = true;
+                ledge = platforms.create(200, 260, 'platform');
+                ledge.body.immovable = true;
+
+                // For ground.
+                ground = platforms.create(0, game.world.height - 64, 'ground');
+                ground.body.immovable = true;
+
+                // Creating timer.
+                timer = game.time.create(false);
+                timer.loop(30000, timerChecker, this);
+                timer.start();
+                
+                //spawning the stars
+                starTimer = game.time.create(false);
+                starTimer.loop(1000, spawnStar, this);
+                starTimer.start();
+
+                // Adding the stars to collect.
+                stars = game.add.group();
+                stars.enableBody = true;
+                stars.physicsBodyType = Phaser.Physics.ARCADE;
+
+                // Adding players.
+                player = game.add.sprite(50, game.world.height - 900, 'player1');
+                player2 = game.add.sprite(718, game.world.height - 900, 'player2');
+                game.physics.arcade.enable(player);
+                game.physics.arcade.enable(player2);
+
+                // Adding gravity and collisions.
+                player.body.gravity.y = 300;
+                player.body.collideWorldBounds = true;
+
+                player2.body.gravity.y = 300;
+                player2.body.collideWorldBounds = true;
+
+                // Player animation
+                player.animations.add('left', [2, 0, 1], 9, true);
+                player.animations.add('right', [3, 4, 5], 9, true);
+                player.animations.add('standLeft', [2], 1, true);
+                player.animations.add('standRight', [3], 1, true);
+
+                player2.animations.add('left', [2, 0, 1], 9, true);
+                player2.animations.add('right', [3, 4, 5], 9, true);
+                player2.animations.add('standLeft', [2], 1, true);
+                player2.animations.add('standRight', [3], 1, true);
+
+                // Adding keyboard as input.
+                cursors = game.input.keyboard.createCursorKeys();
+                w = game.input.keyboard.addKey(Phaser.Keyboard.W);
+                a = game.input.keyboard.addKey(Phaser.Keyboard.A);
+                s = game.input.keyboard.addKey(Phaser.Keyboard.S);
+                d = game.input.keyboard.addKey(Phaser.Keyboard.D);
+                spacebar = game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR);
+
+                // Adding text to place on top of screen.
+                scoreTextP1 = game.add.text(20, 20, 'Score: 0', {fontSize: '25px', fill: '#FFF'});
+                scoreTextP2 = game.add.text(660, 20, 'Score: 0', {fontSize: '25px', fill: '#FFF'});
+                timerText = game.add.text(380, 20, timer.duration.toFixed(0) / 1000, {fontSize: '25px', fill: '#FFF'});
+
+                // Emitter values for the snowflakes.
+                back_emitter = game.add.emitter(game.world.centerX, -32, 600);
+                back_emitter.makeParticles('snowflakes', [0, 1, 2, 3, 4, 5]);
+                back_emitter.maxParticleScale = 0.4;
+                back_emitter.minParticleScale = 0.2;
+                back_emitter.setYSpeed(20, 100);
+                back_emitter.gravity = 0;
+                back_emitter.width = game.world.width * 1.5;
+                back_emitter.minRotation = 0;
+                back_emitter.maxRotation = 20;
+
+                back_emitter.start(false, 14000, 10);
+            } // End of create() function.
+
+            function update() {
+                var hitPlatformP1 = game.physics.arcade.collide(player, platforms);
+                var hitPlatformP2 = game.physics.arcade.collide(player2, platforms);
+                game.physics.arcade.collide(stars, platforms);
+
+                player.body.velocity.x = 0;
+                player2.body.velocity.x = 0;
+                bg.animations.play('twinkle');
+
+                // What happens if both players are alive?
+                if (player.alive && player2.alive) {
+                    //player input
+                    if (a.isDown) {
+                        player.body.velocity.x = -200;
+                        player.animations.play('left');
+                        isP1LookingLeft = 1;
+                    }
+                    else {
+                        if (d.isDown) {
+                            player.body.velocity.x = 200;
+                            player.animations.play('right');
+                            isP1LookingLeft = 0;
+                        }
+                        else {
+                            if (isP1LookingLeft == 1) {
+                                player.animations.play('standLeft');
+                            }
+                            else {
+                                player.animations.play('standRight');
+                            }
+                        }
+                    }
+                    if (w.isDown && player.body.touching.down && hitPlatformP1) {
+                        player.body.velocity.y = -300;
+                    }
+
+                    //player2 input
+                    if (cursors.left.isDown) {
+                        player2.body.velocity.x = -200;
+                        player2.animations.play('left');
+                        isP2LookingLeft = 1;
+                    }
+                    else {
+                        if (cursors.right.isDown) {
+                            player2.body.velocity.x = 200;
+                            player2.animations.play('right');
+                            isP2LookingLeft = 0;
+                        }
+                        else {
+                            if (isP2LookingLeft == 1) {
+                                player2.animations.play('standLeft');
+                            }
+                            else {
+                                player2.animations.play('standRight');
+                            }
+                        }
+                    }
+                    if (cursors.up.isDown && player2.body.touching.down && hitPlatformP2) {
+                        player2.body.velocity.y = -300;
+                    }
+                } // End of what happens when a player is alive.
+
+                // To introduce a restart condition when a player wins or loses.
+                else {
+                    endGameText = game.add.text(275, 325, 'Press space to restart!', {fontSize: '25px', fill: '#FFF'});
+                    if (spacebar.isDown) {
+                        scoreP1 = 0;
+                        scoreP2 = 0;
+                        location.reload()
+                    }
+                }
+
+                // What happens if a player collects a star?
+                game.physics.arcade.overlap(player, stars, collectP1, null, this);
+
+                game.physics.arcade.overlap(player2, stars, collectP2, null, this);
+
+                timerText.text = (timer.duration / 1000).toFixed(1);
+
+                function collectP1(player, stars) {
+                    stars.kill();
+
+                    scoreP1 += 5;
+                    scoreTextP1.text = 'Score: ' + scoreP1;
+                }
+
+                function collectP2(player2, stars) {
+                    stars.kill();
+
+                    scoreP2 += 5;
+                    scoreTextP2.text = 'Score: ' + scoreP2;
+                }
+            } // End of the update function.
+
+            // Called by the timer.loop function when the timer hits 0 seconds.
+            function timerChecker() {
+                if (scoreP1 > scoreP2) {
+                    scoreTextP1.text = 'WINNER';
+                    scoreTextP2.text = 'LOSER';
+                    player2.kill();
+                }
+                else if (scoreP1 < scoreP2) {
+                    scoreTextP1.text = 'LOSER';
+                    scoreTextP2.text = 'WINNER';
+                    player.kill();
+                }
+                else {
+                    scoreTextP1.text = 'TIE';
+                    scoreTextP2.text = 'TIE';
+                    player.kill();
+                    player2.kill();
+                }
+                
+                stars.removeAll();
+                timer.stop();
+                starTimer.stop();
+            } // end of timeChecker() function.
+        }
+
+    function spawnStar(){
+        star = stars.create(getRandomBetween(10, 790), -20, 'goal');
+        star.body.gravity.y = 100;
+        star.body.bounce.y = 0.2
+    }
+
+    function getRandomBetween(min, max){
+        return Math.random() * (max - min) + min;
+    }
+</script>
+</body>
+</html>
